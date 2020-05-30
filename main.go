@@ -1,10 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"os"
-	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,7 +49,7 @@ func checkError(err error) {
 	}
 }
 
-func handleSubConnection(conn *net.TCPConn, msg [512]byte, c chan string) {
+func handleSubConnection(conn *net.TCPConn, c chan string) {
 	for {
 		defer func() {
 			fmt.Println("closing connection")
@@ -62,7 +63,8 @@ func handleSubConnection(conn *net.TCPConn, msg [512]byte, c chan string) {
 	}
 }
 
-func handlePubConnection(conn *net.TCPConn, msg [512]byte, subs []*Subscriber) {
+func handlePubConnection(conn *net.TCPConn, subs []*Subscriber) {
+	msg := [512]byte{}
 	for {
 		defer func() {
 			fmt.Println("closing connection")
@@ -75,6 +77,7 @@ func handlePubConnection(conn *net.TCPConn, msg [512]byte, subs []*Subscriber) {
 		for _, s := range subs {
 			s.recv <- string(msg[0:])
 		}
+		msg = [512]byte{}
 	}
 }
 
@@ -107,7 +110,7 @@ func runServer(host string) error {
 		switch client {
 		case "PUB":
 			fmt.Println("NEW PUB")
-			go handlePubConnection(conn, msg, subs)
+			go handlePubConnection(conn, subs)
 		case "SUB":
 			fmt.Println("NEW SUB")
 			recv := make(chan string)
@@ -115,7 +118,7 @@ func runServer(host string) error {
 				ip:   conn.RemoteAddr().String(),
 				recv: recv,
 			})
-			go handleSubConnection(conn, msg, recv)
+			go handleSubConnection(conn, recv)
 		default:
 			fmt.Println("not a valid client " + client)
 			os.Exit(1)
@@ -168,9 +171,11 @@ func runPub(host, id string) error {
 			fmt.Println("closing connection")
 			conn.Close()
 		}()
-		_, err := conn.Write([]byte(fmt.Sprintf("hello from ( %s ): ( %s )", id, strconv.Itoa(i))))
+		reader := bufio.NewReader(os.Stdin)
+		text, err := reader.ReadString('\n')
 		checkError(err)
-
+		_, err = conn.Write([]byte(strings.Trim(text, "\n")))
+		checkError(err)
 		time.Sleep(3 * time.Second)
 		i++
 	}
