@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"strings"
-	"time"
 )
 
 type Subscriber struct {
@@ -14,7 +13,7 @@ type Subscriber struct {
 	recv chan string
 }
 
-var subs []*Subscriber
+var subs = make(map[string]*Subscriber)
 
 func main() {
 	if len(os.Args) != 4 {
@@ -59,11 +58,13 @@ func handleSubConnection(conn *net.TCPConn, c chan string) {
 		send := <-c
 
 		_, err := conn.Write([]byte(send))
-		checkError(err)
+		if err != nil {
+
+		}
 	}
 }
 
-func handlePubConnection(conn *net.TCPConn, subs []*Subscriber) {
+func handlePubConnection(conn *net.TCPConn) {
 	msg := [512]byte{}
 	for {
 		defer func() {
@@ -99,8 +100,6 @@ func runServer(host string) error {
 		conn, err := l.AcceptTCP()
 		checkError(err)
 
-		fmt.Println(conn.RemoteAddr().String())
-
 		// Read first message
 		_, err = conn.Read(msg[0:])
 		checkError(err)
@@ -109,15 +108,15 @@ func runServer(host string) error {
 
 		switch client {
 		case "PUB":
-			fmt.Println("NEW PUB")
-			go handlePubConnection(conn, subs)
+			fmt.Println("NEW PUBLISTER: " + conn.RemoteAddr().String())
+			go handlePubConnection(conn)
 		case "SUB":
-			fmt.Println("NEW SUB")
+			fmt.Println("NEW SUBSCRIBER: " + conn.RemoteAddr().String())
 			recv := make(chan string)
-			subs = append(subs, &Subscriber{
+			subs[conn.RemoteAddr().String()] = &Subscriber{
 				ip:   conn.RemoteAddr().String(),
 				recv: recv,
-			})
+			}
 			go handleSubConnection(conn, recv)
 		default:
 			fmt.Println("not a valid client " + client)
@@ -165,7 +164,6 @@ func runPub(host, id string) error {
 	_, err = conn.Write([]byte("PUB"))
 	checkError(err)
 
-	i := 0
 	for {
 		defer func() {
 			fmt.Println("closing connection")
@@ -176,7 +174,5 @@ func runPub(host, id string) error {
 		checkError(err)
 		_, err = conn.Write([]byte(strings.Trim(text, "\n")))
 		checkError(err)
-		time.Sleep(3 * time.Second)
-		i++
 	}
 }
